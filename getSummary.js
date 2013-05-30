@@ -20,120 +20,32 @@ var fs = require('fs'),
    mongoose = require('mongoose');
 
 // Connect to MongoDB using the summary database
-// This is probably overkill, and I'm not using this to persist the data, but I wanted
-// to learn more about the mongoose aggregate function so here we go
+// This is probably overkill, but I wanted to learn more about the
+// mongoose aggregate function so here we go
 mongoose.connect('localhost', 'summary');
 
 // Setup Data Models
-var Signups = require('./models/signups');
-var Actives = require('./models/actives');
+var Input = require('./models/input');
 var Result = require('./models/result');
 
 // Helper Functions
+var help = require('./helpers');
+
 /**
  * Simple Error handling
  * @param  {Object} error Error Object from Node
  * @return {None}       
  */
 function handleErr (error) {
-   console.log(error);
+   // in the event of a real application, this would be more complete
+   console.log(error.message);
    process.exit(1);
 }
 
 /**
- * This function takes in a pipe delimited data file and puts it in the database
- * @param  {String}   file     File path/name of input file
- * @param  {String}   type     Type of input file, either signups or actives
- * @param  {Function} callback Sends error message or null
- * @return {Function}          Callback function
+ * And now down to business
  */
-function readPipeDelimited (file, type, callback) {
-   if (type === 'actives') {
-      // This is ugly, but for simplicity I'm not going to reuse the database
-      Actives.find({}).remove().exec(function(err) {
-         if (err) {
-            return callback(err);
-         } else {
-            fs.readFile(file, function (err, data){
-               if (err) {
-                  handleErr(err);
-               } else {
-                  var numDrops = 0;
-                  var lineList = data.toString().split('\n');
-                  var total = lineList.length;
-                  // go through each item in the array and put it in the database, except for the headers
-                  for (var i=1; i<total; i++) {
-                     var line = lineList[i].split('|');
-                     if (typeof(line[0])!=='undefined' && typeof(line[1])!=='undefined') {
-                        var active = new Actives({
-                           'date' : line[0],
-                           'count' : line[1].replace(/\,/g,'')
-                        });
-                        active.save();
-                     } else {
-                        numDrops++;
-                     }
-                     if (i==(total-1)) {
-                        // this is the end
-                        if (numDrops>0) {
-                           console.log('Dropped ' + numDrops + ' lines from active users file due to invalid data.');
-                        }
-                        return callback(null);
-                     }
-                  }
-               }
-            });
-         }
-      });
-   } else if (type === 'signups') {
-      Signups.find({}).remove().exec(function(err) {
-         if (err) {
-            return callback(err);
-         } else {
-            fs.readFile(file, function (err, data){
-               if (err) {
-                  handleErr(err);
-               } else {
-                  var numDrops = 0;
-                  var lineList = data.toString().split('\n');
-                  var total = lineList.length;
-                  // go through each item in the array and put it in the database, except for the headers
-                  for (var i=1; i<total; i++) {
-                     var line = lineList[i].split('|');
-                     if (typeof(line[0])!=='undefined' && typeof(line[1])!=='undefined') {
-                        var signup = new Signups({
-                           'date' : line[0],
-                           'count' : line[1].replace(/\,/g,'')
-                        });
-                        signup.save();
-                     } else {
-                        numDrops++;
-                     }
-                     if (i==(total-1)) {
-                        // this is the end
-                        if (numDrops>0) {
-                           console.log('Dropped ' + numDrops + ' lines from active users file due to invalid data.');
-                        }
-                        return callback(null);
-                     }
-                  }
-               }
-            });
-         }
-      });
-   } else {
-      return callback('Error: what did you even do?');
-   }
-}
-
-// TODO: write the results out
-function writeResultFile (data, type, callback) {
-
-   return callback(null);
-}
-
 // console.log(process.argv);
-
 // Inspect process.argv for command line arguments, use switch to determine next steps.
 // This object is an array that node generates automatically based on CLI
 var args = process.argv;
@@ -150,9 +62,9 @@ switch(args[2]) {
       help    += '                       active site users.\n';
       help    += '\n';
       help    += 'Input Files:\n';
-      help    += ' signups_file          Pipe-delimited file with dates and number of active\n';
-      help    += '                       users per date.\n';
-      help    += ' active_users_file     Pipe-delimited file with dates and number of active\n';
+      help    += ' signups               Pipe-delimited file with dates and number of signups\n';
+      help    += '                       per date.\n';
+      help    += ' active_users          Pipe-delimited file with dates and number of active\n';
       help    += '                       users per date.\n';
       console.log(help);
       process.exit(0);
@@ -166,49 +78,67 @@ switch(args[2]) {
             if ( typeof(args[4]!=='undefined' )) {
                // user wants to inclue active user statistics
                //console.log('includes active: ', args[4]);
-               readPipeDelimited(args[2], 'signups', function (err) {
+               help.readPipeDelimited(args[2], function (err, signups, droppedSignups) {
                   if (err) {
                      handleErr(err);
                   } else {
-                     readPipeDelimited(args[4], 'actives', function (err) {
+                     help.readPipeDelimited(args[4], function (err, actives, droppedActives) {
                         if (err) {
                            handleErr(err);
                         } else {
-                           // whew, data has been entered successfully
-                           setTimeout(function() {
-                              // TODO: Generate aggregate data
-                              process.exit(0);
-                           }, 1000);
+                           help.ingestBoth(signups, droppedSignups, actives, droppedActives, function(err, inputId){
+                              if (err) {
+                                 handleErr(err);
+                              } else {
+                                 help.writeResultFile(inputId, 'actives', function (err, fileName) {
+                                    if (err) {
+                                       handleErr(err);
+                                    } else {
+                                       console.log('Output successfully generated, stored in: ' + fileName);
+                                       // Maybe tell them about the database record?
+                                       process.exit(0);
+                                    }
+                                 });
+                              }
+                           });
                         }
                      });
                   }
                });
             } else {
-               console.log('Error: must include filename for active users information.');
-               process.exit(1);
+               handleErr({ 'message': 'Error: must include filename for active users information.'});
             }
          } else {
             // user has entered invalid input
-            console.log('Error: invalid arguments. Use --help for usage information.');
-            process.exit(1);
+            handleErr({'message' : 'Error: invalid arguments. Use --help for usage information.'});
          }
       } else {
          // use only wants signup statistics
          // console.log('Only Signups: ', args[2]);
          if ( typeof(args[2])!=='undefined' ) {
-            readPipeDelimited(args[2], 'signups', function (err) {
+            help.readPipeDelimited(args[2], function (err, signups, droppedSignups) {
                if (err) {
                   handleErr(err);
                } else {
-                  // wait until data has been entered
-                  setTimeout( function() {
-                     // now generate aggregate data
-                     process.exit(0);
-                  }, 500);
+                  help.ingestSignups(signups, droppedSignups, function(err, inputId){
+                     if (err) {
+                        handleErr(err);
+                     } else {
+                        help.writeResultFile(inputId, 'signups', function (err, fileName) {
+                           if (err) {
+                              handleErr(err);
+                           } else {
+                              console.log('Output successfully generated, stored in: ' + fileName);
+                              // Maybe tell them about the database record?
+                              process.exit(0);
+                           }
+                        });
+                     }
+                  });
                }
             });
          } else {
-            handleErr('Error: No input file specified.');
+            handleErr({'message' : 'Error: No input file specified. Use -h for assistance.'});
          }
       }
       break;

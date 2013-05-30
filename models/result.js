@@ -1,7 +1,8 @@
 /*
  *  Data Model for active users information
  *
- * type can be 'signups' or 'combo'
+ * type can be 'signups' or 'actives'
+ * 
  */
 
 var mongoose = require('mongoose');
@@ -12,6 +13,7 @@ var Schema = mongoose.Schema;
 var ResultSchema = new Schema({
       'created' : { type: Date, default: Date.now },
       'type' : String,
+      'input' : { type: Schema.ObjectId, ref: 'Input'},
       'lines' : [{
          'month' : Number,
          'total_signups' : Number,
