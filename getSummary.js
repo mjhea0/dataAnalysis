@@ -22,7 +22,13 @@ var fs = require('fs'),
 // Connect to MongoDB using the summary database
 // This is probably overkill, but I wanted to learn more about the
 // mongoose aggregate function so here we go
-mongoose.connect('localhost', 'summary');
+try {
+   mongoose.connect('localhost', 'summary');
+} catch (err) {
+   console.log('Are you sure you have mongod running on localhost? Because node says:');
+   console.log(err.message);
+   process.exit(1);
+}
 
 // Setup Data Models
 var Input = require('./models/input');
