@@ -170,7 +170,7 @@ function createResult (inputId, type, callback) {
 
 module.exports = {
    /**
-    * This function takes in a pipe delimited data file and puts it in the database
+    * This function takes in a pipe delimited data file and returns an array of entries
     * @param  {String}   file     File path/name of input file
     * @param  {Function} callback Sends error message, entities array, and number of drops
     * @return {Function}          Callback function
@@ -307,7 +307,6 @@ module.exports = {
                      }
                   }
                });
-               callback(null, file);
             }
          }
       });
